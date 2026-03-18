@@ -36,9 +36,10 @@ def ffprobe_metadata(video_path):
         str(video_path)
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(cmd, capture_output=True, text=True,
+                                encoding='utf-8', errors='replace', timeout=30)
         data = json.loads(result.stdout)
-    except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError):
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, TypeError, FileNotFoundError):
         return None, None, None
 
     duration = None
@@ -88,7 +89,8 @@ def extract_frame(video_path, timestamp, output_path):
         str(output_path),
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        result = subprocess.run(cmd, capture_output=True, text=True,
+                                encoding='utf-8', errors='replace', timeout=15)
         return result.returncode == 0 and Path(output_path).exists()
     except subprocess.TimeoutExpired:
         return False
@@ -144,7 +146,8 @@ def generate_gif(video_path, gif_path, duration):
         ]
 
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            result = subprocess.run(cmd, capture_output=True, text=True,
+                                    encoding='utf-8', errors='replace', timeout=30)
             if result.returncode != 0:
                 stderr_tail = result.stderr.strip().splitlines()[-3:] if result.stderr.strip() else ["(no output)"]
                 print(f"\n  ffmpeg failed for {Path(video_path).name}:\n    " + "\n    ".join(stderr_tail))

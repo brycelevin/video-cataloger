@@ -66,6 +66,7 @@ Upserts use `ON CONFLICT(video_path) DO UPDATE` so re-scanning is safe and updat
 - **HTTP Range streaming** — `/stream/<id>` returns `206 Partial Content` for seek support in all browsers. Reads in 8KB chunks.
 - **Sort whitelist** — `get_videos()` only allows known column names in ORDER BY to prevent SQL injection via the `sort` parameter.
 - **No JS framework** — server-rendered Jinja2 templates. The only JS is a lazy-loading polyfill.
+- **UTF-8 subprocess encoding** — All `subprocess.run` calls that invoke `ffmpeg`/`ffprobe` must use `encoding='utf-8', errors='replace'` alongside `text=True`. Windows defaults to cp1252, which crashes on non-ASCII bytes in video metadata or ffmpeg output. Always catch `TypeError` in addition to `json.JSONDecodeError` when parsing subprocess stdout, since encoding failures can produce `None`.
 
 ## Environment Variables
 
