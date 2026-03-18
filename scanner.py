@@ -93,13 +93,14 @@ def generate_gif(video_path, gif_path, duration):
         f"scale={config.GIF_WIDTH}:-1:flags=lanczos,"
         f"split[s0][s1];"
         f"[s0]palettegen=max_colors={config.GIF_MAX_COLORS}:stats_mode=diff[p];"
-        f"[s1][p]paletteuse=dither=bayer:bayer_scale=3"
+        f"[s1][p]paletteuse=dither=bayer:bayer_scale=3[out]"
     )
 
     cmd = [
-        "ffmpeg", "-y", "-v", "quiet",
+        "ffmpeg", "-y", "-v", "warning",
         "-i", str(video_path),
-        "-vf", vf,
+        "-filter_complex", vf,
+        "-map", "[out]",
         "-loop", "0",
         str(gif_path)
     ]
@@ -107,12 +108,13 @@ def generate_gif(video_path, gif_path, duration):
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         if result.returncode != 0:
-            print(f"\n  ffmpeg failed for {Path(video_path).name}: {result.stderr.strip()}")
+            stderr_tail = result.stderr.strip().splitlines()[-3:] if result.stderr.strip() else ["(no output)"]
+            print(f"\n  ffmpeg failed for {Path(video_path).name}:\n    " + "\n    ".join(stderr_tail))
             if gif_path.exists():
                 gif_path.unlink()
             return False
     except subprocess.TimeoutExpired:
-        # Clean up partial file
+        print(f"\n  ffmpeg timed out for {Path(video_path).name}")
         if gif_path.exists():
             gif_path.unlink()
         return False
