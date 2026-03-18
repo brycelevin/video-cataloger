@@ -1,0 +1,7 @@
+catalog.db
+gifs/
+__pycache__/
+*.pyc
+.env
+venv/
+.venv/

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ video['filename'] }} — Video Cataloger{% endblock %}
+
+{% block content %}
+<div class="player-container">
+    <a href="{{ url_for('index') }}" class="back-link">← Back to gallery</a>
+
+    <video controls autoplay preload="metadata" class="video-player">
+        <source src="{{ url_for('stream', video_id=video['id']) }}" type="video/mp4">
+        Your browser does not support the video tag.
+    </video>
+
+    <div class="video-meta">
+        <h2>{{ video['filename'] }}</h2>
+        <table class="meta-table">
+            <tr><td>Folder</td><td>{{ video['parent_dir'] }}</td></tr>
+            <tr><td>Path</td><td class="mono">{{ video['relative_path'] }}</td></tr>
+            <tr><td>Duration</td><td>{{ video['duration'] | duration }}</td></tr>
+            <tr><td>Size</td><td>{{ video['file_size'] | filesize }}</td></tr>
+            {% if video['width'] and video['height'] %}
+            <tr><td>Resolution</td><td>{{ video['width'] }}×{{ video['height'] }}</td></tr>
+            {% endif %}
+            <tr><td>Modified</td><td>{{ video['date_modified'] }}</td></tr>
+        </table>
+    </div>
+</div>
+{% endblock %}

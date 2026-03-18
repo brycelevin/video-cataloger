@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Gallery — Video Cataloger{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+    <form class="search-form" method="get" action="{{ url_for('index') }}">
+        <input type="text" name="q" value="{{ query }}" placeholder="Search videos...">
+        <input type="hidden" name="sort" value="{{ sort }}">
+        <input type="hidden" name="order" value="{{ order }}">
+        <button type="submit">Search</button>
+        {% if query %}
+        <a href="{{ url_for('index', sort=sort, order=order) }}" class="btn-clear">Clear</a>
+        {% endif %}
+    </form>
+
+    <div class="sort-controls">
+        <span>Sort by:</span>
+        {% set sort_options = [
+            ("filename", "Name"),
+            ("duration", "Duration"),
+            ("file_size", "Size"),
+            ("date_modified", "Date"),
+            ("parent_dir", "Folder"),
+        ] %}
+        {% for key, label in sort_options %}
+        {% set new_order = "desc" if sort == key and order == "asc" else "asc" %}
+        <a href="{{ url_for('index', sort=key, order=new_order, q=query, page=1) }}"
+           class="sort-link {% if sort == key %}active{% endif %}">
+            {{ label }}
+            {% if sort == key %}
+                {{ "▲" if order == "asc" else "▼" }}
+            {% endif %}
+        </a>
+        {% endfor %}
+    </div>
+</div>
+
+<p class="results-info">{{ total }} video{{ "s" if total != 1 }} {% if query %}matching "{{ query }}"{% endif %}</p>
+
+<div class="gallery">
+    {% for v in videos %}
+    <a href="{{ url_for('player', video_id=v['id']) }}" class="card">
+        {% if v['gif_path'] %}
+        <img src="{{ url_for('serve_gif', filename=v['gif_path'].split('/')[-1]) }}"
+             alt="{{ v['filename'] }}"
+             loading="lazy"
+             class="gif-preview">
+        {% else %}
+        <div class="gif-placeholder">No Preview</div>
+        {% endif %}
+        <div class="card-info">
+            <span class="card-title" title="{{ v['filename'] }}">{{ v['filename'] }}</span>
+            <span class="card-meta">
+                {{ v['duration'] | duration }}
+                · {{ v['file_size'] | filesize }}
+                {% if v['width'] and v['height'] %}· {{ v['width'] }}×{{ v['height'] }}{% endif %}
+            </span>
+            <span class="card-folder" title="{{ v['relative_path'] }}">{{ v['parent_dir'] }}</span>
+        </div>
+    </a>
+    {% endfor %}
+</div>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="{{ url_for('index', page=page-1, sort=sort, order=order, q=query) }}" class="page-link">← Previous</a>
+    {% endif %}
+
+    <span class="page-info">Page {{ page }} of {{ total_pages }}</span>
+
+    {% if page < total_pages %}
+    <a href="{{ url_for('index', page=page+1, sort=sort, order=order, q=query) }}" class="page-link">Next →</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}
