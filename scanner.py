@@ -3,8 +3,10 @@
 import argparse
 import json
 import os
+import random
 import subprocess
 import sys
+import tempfile
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
@@ -75,69 +77,85 @@ def gif_output_path(video_path, scan_root):
     return config.GIF_DIR / name
 
 
+def extract_frame(video_path, timestamp, output_path):
+    """Extract a single frame at a given timestamp using fast keyframe seek."""
+    cmd = [
+        "ffmpeg", "-y", "-v", "warning",
+        "-ss", f"{timestamp:.2f}",
+        "-i", str(video_path),
+        "-frames:v", "1",
+        "-vf", f"scale={config.GIF_WIDTH}:-1:flags=lanczos",
+        str(output_path),
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        return result.returncode == 0 and Path(output_path).exists()
+    except subprocess.TimeoutExpired:
+        return False
+
+
 def generate_gif(video_path, gif_path, duration):
-    """Generate an animated GIF from a video using a single ffmpeg command."""
+    """Generate an animated GIF by seeking to random timestamps and grabbing single frames."""
     gif_path = Path(gif_path)
     gif_path.parent.mkdir(parents=True, exist_ok=True)
 
     if duration is None or duration <= 0:
         duration = 10  # fallback
 
-    # For long videos, sample from a limited window instead of decoding everything.
-    # This avoids ffmpeg having to decode the entire file just to pick ~24 frames.
-    max_sample_duration = 300  # sample at most 5 minutes of footage
-    if duration > max_sample_duration:
-        # Start 10% in to skip intros, sample up to max_sample_duration
-        seek_start = duration * 0.1
-        effective_duration = min(max_sample_duration, duration * 0.8)
-    else:
-        seek_start = 0
-        effective_duration = duration
+    num_frames = config.GIF_FRAMES
+    # Pick random timestamps spread throughout the video (skip first/last 2%)
+    margin = duration * 0.02
+    timestamps = sorted(random.uniform(margin, duration - margin) for _ in range(num_frames))
 
-    # Calculate fps to get ~GIF_FRAMES frames spread across the sampled window
-    fps = config.GIF_FRAMES / effective_duration
-    if fps > 10:
-        fps = 10  # cap for very short videos
+    with tempfile.TemporaryDirectory() as tmpdir:
+        frame_paths = []
+        for i, ts in enumerate(timestamps):
+            frame_path = os.path.join(tmpdir, f"frame_{i:03d}.png")
+            if extract_frame(video_path, ts, frame_path):
+                frame_paths.append(frame_path)
 
-    vf = (
-        f"fps={fps:.4f},"
-        f"scale={config.GIF_WIDTH}:-1:flags=lanczos,"
-        f"split[s0][s1];"
-        f"[s0]palettegen=max_colors={config.GIF_MAX_COLORS}:stats_mode=diff[p];"
-        f"[s1][p]paletteuse=dither=bayer:bayer_scale=3[out]"
-    )
+        if not frame_paths:
+            print(f"\n  No frames extracted for {Path(video_path).name}")
+            return False
 
-    cmd = ["ffmpeg", "-y", "-v", "warning"]
-    # Fast seek (before -i) skips directly without decoding
-    if seek_start > 0:
-        cmd += ["-ss", f"{seek_start:.2f}"]
-    cmd += ["-i", str(video_path)]
-    # Limit how much of the input to process
-    if duration > max_sample_duration:
-        cmd += ["-t", f"{effective_duration:.2f}"]
-    cmd += [
-        "-filter_complex", vf,
-        "-map", "[out]",
-        "-loop", "0",
-        str(gif_path)
-    ]
+        # Assemble frames into GIF using ffmpeg concat + palette
+        # Target ~3fps playback so the GIF loops in a few seconds
+        list_file = os.path.join(tmpdir, "frames.txt")
+        with open(list_file, "w") as f:
+            for fp in frame_paths:
+                f.write(f"file '{fp}'\n")
+                f.write("duration 0.33\n")
+            # Repeat last frame to avoid truncation
+            f.write(f"file '{frame_paths[-1]}'\n")
 
-    # Scale timeout with the amount of video being processed
-    timeout = max(120, int(effective_duration * 0.8))
+        vf = (
+            f"split[s0][s1];"
+            f"[s0]palettegen=max_colors={config.GIF_MAX_COLORS}:stats_mode=diff[p];"
+            f"[s1][p]paletteuse=dither=bayer:bayer_scale=3[out]"
+        )
 
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        if result.returncode != 0:
-            stderr_tail = result.stderr.strip().splitlines()[-3:] if result.stderr.strip() else ["(no output)"]
-            print(f"\n  ffmpeg failed for {Path(video_path).name}:\n    " + "\n    ".join(stderr_tail))
+        cmd = [
+            "ffmpeg", "-y", "-v", "warning",
+            "-f", "concat", "-safe", "0", "-i", list_file,
+            "-filter_complex", vf,
+            "-map", "[out]",
+            "-loop", "0",
+            str(gif_path),
+        ]
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            if result.returncode != 0:
+                stderr_tail = result.stderr.strip().splitlines()[-3:] if result.stderr.strip() else ["(no output)"]
+                print(f"\n  ffmpeg failed for {Path(video_path).name}:\n    " + "\n    ".join(stderr_tail))
+                if gif_path.exists():
+                    gif_path.unlink()
+                return False
+        except subprocess.TimeoutExpired:
+            print(f"\n  ffmpeg timed out assembling GIF for {Path(video_path).name}")
             if gif_path.exists():
                 gif_path.unlink()
             return False
-    except subprocess.TimeoutExpired:
-        print(f"\n  ffmpeg timed out for {Path(video_path).name}")
-        if gif_path.exists():
-            gif_path.unlink()
-        return False
 
     return gif_path.exists()
 
