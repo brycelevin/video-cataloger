@@ -83,8 +83,19 @@ def generate_gif(video_path, gif_path, duration):
     if duration is None or duration <= 0:
         duration = 10  # fallback
 
-    # Calculate fps to get ~GIF_FRAMES frames spread across the video
-    fps = config.GIF_FRAMES / duration
+    # For long videos, sample from a limited window instead of decoding everything.
+    # This avoids ffmpeg having to decode the entire file just to pick ~24 frames.
+    max_sample_duration = 300  # sample at most 5 minutes of footage
+    if duration > max_sample_duration:
+        # Start 10% in to skip intros, sample up to max_sample_duration
+        seek_start = duration * 0.1
+        effective_duration = min(max_sample_duration, duration * 0.8)
+    else:
+        seek_start = 0
+        effective_duration = duration
+
+    # Calculate fps to get ~GIF_FRAMES frames spread across the sampled window
+    fps = config.GIF_FRAMES / effective_duration
     if fps > 10:
         fps = 10  # cap for very short videos
 
@@ -96,17 +107,26 @@ def generate_gif(video_path, gif_path, duration):
         f"[s1][p]paletteuse=dither=bayer:bayer_scale=3[out]"
     )
 
-    cmd = [
-        "ffmpeg", "-y", "-v", "warning",
-        "-i", str(video_path),
+    cmd = ["ffmpeg", "-y", "-v", "warning"]
+    # Fast seek (before -i) skips directly without decoding
+    if seek_start > 0:
+        cmd += ["-ss", f"{seek_start:.2f}"]
+    cmd += ["-i", str(video_path)]
+    # Limit how much of the input to process
+    if duration > max_sample_duration:
+        cmd += ["-t", f"{effective_duration:.2f}"]
+    cmd += [
         "-filter_complex", vf,
         "-map", "[out]",
         "-loop", "0",
         str(gif_path)
     ]
 
+    # Scale timeout with the amount of video being processed
+    timeout = max(120, int(effective_duration * 0.8))
+
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         if result.returncode != 0:
             stderr_tail = result.stderr.strip().splitlines()[-3:] if result.stderr.strip() else ["(no output)"]
             print(f"\n  ffmpeg failed for {Path(video_path).name}:\n    " + "\n    ".join(stderr_tail))
