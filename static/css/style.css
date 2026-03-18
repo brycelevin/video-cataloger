@@ -115,6 +115,10 @@ main { max-width: 1400px; margin: 0 auto; padding: 1.5rem; }
     background: #0d1525;
 }
 
+canvas.gif-preview {
+    object-fit: cover;
+}
+
 .gif-placeholder {
     width: 100%;
     aspect-ratio: 16/9;

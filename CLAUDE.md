@@ -2,6 +2,8 @@
 
 Personal tool for browsing, previewing, and streaming 500-2000 mp4 videos spread across folders on an external drive. Generates animated GIF previews, stores metadata in SQLite, and serves a gallery UI via Flask.
 
+**Target platform:** Windows. **Development machine:** macOS (MacBook). File paths in the database and on disk will use Windows backslash separators at runtime. Code must handle both separators where paths are parsed or displayed.
+
 ## Quick Start
 
 ```bash

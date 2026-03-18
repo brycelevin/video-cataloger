@@ -41,10 +41,11 @@
     {% for v in videos %}
     <a href="{{ url_for('player', video_id=v['id']) }}" class="card">
         {% if v['gif_path'] %}
-        <img src="{{ url_for('serve_gif', filename=v['gif_path'].split('/')[-1]) }}"
+        <canvas class="gif-preview gif-canvas" aria-label="{{ v['filename'] }}"></canvas>
+        <img data-gif="{{ url_for('serve_gif', filename=v['gif_path'].replace('\\', '/').split('/')[-1]) }}"
              alt="{{ v['filename'] }}"
-             loading="lazy"
-             class="gif-preview">
+             class="gif-preview gif-animated"
+             style="display:none;">
         {% else %}
         <div class="gif-placeholder">No Preview</div>
         {% endif %}
