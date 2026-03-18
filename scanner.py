@@ -105,7 +105,12 @@ def generate_gif(video_path, gif_path, duration):
     ]
 
     try:
-        subprocess.run(cmd, capture_output=True, timeout=120)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        if result.returncode != 0:
+            print(f"\n  ffmpeg failed for {Path(video_path).name}: {result.stderr.strip()}")
+            if gif_path.exists():
+                gif_path.unlink()
+            return False
     except subprocess.TimeoutExpired:
         # Clean up partial file
         if gif_path.exists():
